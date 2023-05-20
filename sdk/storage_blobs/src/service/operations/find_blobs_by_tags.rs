@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use azure_core::{prelude::*, xml::read_xml, Response as HttpResponse};
 use azure_storage::headers::CommonStorageResponseHeaders;
 
@@ -25,8 +27,10 @@ impl FindBlobsByTagsBuilder {
                     next_marker.append_to_url_query(&mut url);
                 }
                 url.query_pairs_mut().append_pair("where", &this.expression);
+
+                let workaround_url = handle_space_bug(url)?;
                 let mut request = this.client.finalize_request(
-                    url,
+                    workaround_url,
                     azure_core::Method::Get,
                     azure_core::headers::Headers::new(),
                     None,
@@ -39,6 +43,13 @@ impl FindBlobsByTagsBuilder {
         };
         azure_core::Pageable::new(make_request)
     }
+}
+
+fn handle_space_bug(url: url::Url) -> azure_core::Result<url::Url> {
+    let wrong_spaces = url.as_str();
+
+    let fixed = wrong_spaces.replace("+", "%20");
+    url::Url::from_str(&fixed).map_err(|e| e.into())
 }
 
 pub type FindBlobsByTags = azure_core::Pageable<FindBlobsByTagsResponse, azure_core::error::Error>;
