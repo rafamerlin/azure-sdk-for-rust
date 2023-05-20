@@ -28,6 +28,7 @@ impl FindBlobsByTagsBuilder {
                 }
                 url.query_pairs_mut().append_pair("where", &this.expression);
 
+                //Created workaround due to this issue: https://github.com/Azure/azure-sdk-for-rust/issues/1284
                 let workaround_url = handle_space_bug(url)?;
                 let mut request = this.client.finalize_request(
                     workaround_url,
