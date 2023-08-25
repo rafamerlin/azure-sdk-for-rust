@@ -16,6 +16,7 @@ operation! {
     ?prefix: Prefix,
     ?delimiter: Delimiter,
     ?max_results: MaxResults,
+    ?continue_from: NextMarker,
     ?include_snapshots: bool,
     ?include_metadata: bool,
     ?include_uncommitted_blobs: bool,
@@ -36,8 +37,15 @@ impl ListBlobsBuilder {
                 url.query_pairs_mut().append_pair("restype", "container");
                 url.query_pairs_mut().append_pair("comp", "list");
 
+                //This is the continuation that happens when we query too much data and the paging needs 
+                //to hit the http request again to get more data, so it has priority if we get both
                 if let Some(next_marker) = continuation {
                     next_marker.append_to_url_query(&mut url);
+                } 
+                //This one is in case we want to continue from the last request (or my assumption that this is what
+                // would happen in case we are trying to get more data from the last request)
+                else if let Some(continue_from) = this.continue_from{
+                    continue_from.append_to_url_query(&mut url);
                 }
 
                 this.prefix.append_to_url_query(&mut url);
