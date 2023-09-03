@@ -26,6 +26,7 @@ operation! {
     ?if_match_condition: IfMatchCondition,
     ?if_modified_since: IfModifiedSince,
     ?max_item_count: MaxItemCount,
+    ?continue_from: Continuation,
     ?consistency_level: ConsistencyLevel,
     ?parallelize_cross_partition_query: ParallelizeCrossPartition,
     ?query_cross_partition: QueryCrossPartition,
@@ -86,6 +87,11 @@ impl QueryDocumentsBuilder {
 
                 if let Some(ref c) = continuation {
                     request.insert_headers(c);
+                }
+                //This one is in case we want to continue from the last request (or my assumption that this is what
+                // would happen in case we are trying to get more data from the last request)
+                else if let Some(continue_from) = this.continue_from{
+                    request.insert_headers(&continue_from);            
                 }
 
                 let response = this
