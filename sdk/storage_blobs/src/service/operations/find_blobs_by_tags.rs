@@ -25,8 +25,12 @@ impl FindBlobsByTagsBuilder {
                     next_marker.append_to_url_query(&mut url);
                 }
                 url.query_pairs_mut().append_pair("where", &this.expression);
+
+                let url = make_url_compatible_with_api(url)?;
+                let _url_string = url.as_str();
+
                 let mut request = BlobServiceClient::finalize_request(
-                    make_url_compatible_with_api(url)?,
+                    url,
                     azure_core::Method::Get,
                     azure_core::headers::Headers::new(),
                     None,
