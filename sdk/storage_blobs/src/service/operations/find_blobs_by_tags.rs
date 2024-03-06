@@ -1,6 +1,7 @@
 use crate::prelude::BlobServiceClient;
 use azure_core::{prelude::*, Response as HttpResponse};
 use azure_storage::headers::CommonStorageResponseHeaders;
+use std::str::FromStr;
 
 operation! {
     #[stream]
@@ -25,7 +26,7 @@ impl FindBlobsByTagsBuilder {
                 }
                 url.query_pairs_mut().append_pair("where", &this.expression);
                 let mut request = BlobServiceClient::finalize_request(
-                    url,
+                    make_url_compatible_with_api(url)?,
                     azure_core::Method::Get,
                     azure_core::headers::Headers::new(),
                     None,
@@ -38,6 +39,13 @@ impl FindBlobsByTagsBuilder {
         };
         azure_core::Pageable::new(make_request)
     }
+}
+
+/// ` AND ` in the spec can be converted to `+AND+`, however, azure rest api won't accept it unless we do a `%20AND%20`
+fn make_url_compatible_with_api(url: url::Url) -> azure_core::Result<url::Url> {
+    let url = url.as_str();
+
+    url::Url::from_str(&url.replace("+", "%20")).map_err(|e| e.into())
 }
 
 pub type FindBlobsByTags = azure_core::Pageable<FindBlobsByTagsResponse, azure_core::error::Error>;
