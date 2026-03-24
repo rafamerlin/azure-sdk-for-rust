@@ -37,3 +37,4 @@ vcpkg_installed/
 TempTypeSpecFiles/
 test-results/
 .DS_Store
+sdk/storage/azure_storage_blob/examples/blob_storage_logging_shared_key.rs
