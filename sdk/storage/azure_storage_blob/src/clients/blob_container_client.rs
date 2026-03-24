@@ -4,33 +4,33 @@
 pub use crate::generated::clients::{BlobContainerClient, BlobContainerClientOptions};
 
 use crate::{
-    logging::apply_storage_logging_defaults, models::StorageErrorCode,
-    pipeline::StorageHeadersPolicy, BlobClient,
+    logging::apply_storage_logging_defaults,
+    models::StorageErrorCode,
+    pipeline::{auth_policy_helper, StorageHeadersPolicy},
+    BlobClient, StorageCredential,
 };
 use azure_core::{
-    credentials::TokenCredential,
     error::ErrorKind,
-    http::{
-        policies::{auth::BearerTokenAuthorizationPolicy, Policy},
-        Pipeline, StatusCode, Url,
-    },
+    http::{Pipeline, StatusCode, Url},
     tracing, Result,
 };
 use std::sync::Arc;
 
 impl BlobContainerClient {
-    /// Creates a new BlobContainerClient, using Entra ID authentication.
+    /// Creates a new BlobContainerClient.
+    ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
     ///
     /// # Arguments
     ///
     /// * `endpoint` - The full URL of the Azure storage account, for example `https://myaccount.blob.core.windows.net/`
     /// * `container_name` - The name of the container.
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
     /// * `options` - Optional configuration for the client.
     pub fn new(
         endpoint: &str,
         container_name: &str,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<BlobContainerClientOptions>,
     ) -> Result<Self> {
         let mut url = Url::parse(endpoint)?;
@@ -50,15 +50,17 @@ impl BlobContainerClient {
 
     /// Creates a new BlobContainerClient from a container URL.
     ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
+    ///
     /// # Arguments
     ///
     /// * `container_url` - The full URL of the container, for example `https://myaccount.blob.core.windows.net/mycontainer`.
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
     /// * `options` - Optional configuration for the client.
     #[tracing::new("Storage.Blob.Container")]
     pub fn from_url(
         container_url: Url,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<BlobContainerClientOptions>,
     ) -> Result<Self> {
         let mut options = options.unwrap_or_default();
@@ -70,17 +72,17 @@ impl BlobContainerClient {
             .per_call_policies
             .push(storage_headers_policy);
 
-        if let Some(token_credential) = credential {
-            if !container_url.scheme().starts_with("https") {
+        if let Some(credential) = credential {
+            let credential = credential.into();
+            if matches!(credential, StorageCredential::TokenCredential(_))
+                && !container_url.scheme().starts_with("https")
+            {
                 return Err(azure_core::Error::with_message(
                     azure_core::error::ErrorKind::Other,
                     format!("{container_url} must use https"),
                 ));
             }
-            let auth_policy: Arc<dyn Policy> = Arc::new(BearerTokenAuthorizationPolicy::new(
-                token_credential,
-                vec!["https://storage.azure.com/.default"],
-            ));
+            let auth_policy = auth_policy_helper::create_auth_policy(&credential);
             options.client_options.per_try_policies.push(auth_policy);
         }
 

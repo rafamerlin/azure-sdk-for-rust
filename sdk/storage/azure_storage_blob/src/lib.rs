@@ -20,3 +20,5 @@ mod logging;
 pub mod models;
 pub use models::error;
 pub use models::error::{Result, StorageError};
+
+pub use azure_storage_common::{StorageCredential, StorageSharedKeyCredential};

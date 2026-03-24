@@ -25,3 +25,5 @@ pub mod models {
 pub mod clients;
 
 pub use clients::{QueueClient, QueueClientOptions, QueueServiceClient, QueueServiceClientOptions};
+
+pub use azure_storage_common::{StorageCredential, StorageSharedKeyCredential};

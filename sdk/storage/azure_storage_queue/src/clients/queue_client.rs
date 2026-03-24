@@ -5,29 +5,44 @@ pub use crate::generated::clients::{QueueClient, QueueClientOptions};
 
 use crate::{generated::models::*, logging::apply_storage_logging_defaults};
 use azure_core::{
-    credentials::TokenCredential,
-    http::{
-        policies::{auth::BearerTokenAuthorizationPolicy, Policy},
-        NoFormat, Pipeline, RawResponse, RequestContent, Response, StatusCode, Url, XmlFormat,
-    },
+    http::{NoFormat, Pipeline, RawResponse, RequestContent, Response, StatusCode, Url, XmlFormat},
     tracing, xml, Result,
 };
+use azure_storage_common::{SharedKeyAuthorizationPolicy, StorageCredential};
 use std::sync::Arc;
 
+fn create_auth_policy(
+    credential: &StorageCredential,
+) -> Arc<dyn azure_core::http::policies::Policy> {
+    match credential {
+        StorageCredential::TokenCredential(token_credential) => Arc::new(
+            azure_core::http::policies::auth::BearerTokenAuthorizationPolicy::new(
+                token_credential.clone(),
+                vec!["https://storage.azure.com/.default"],
+            ),
+        ),
+        StorageCredential::SharedKey(shared_key_credential) => Arc::new(
+            SharedKeyAuthorizationPolicy::new(shared_key_credential.clone()),
+        ),
+    }
+}
+
 impl QueueClient {
-    /// Creates a new QueueClient, using Entra ID authentication.
+    /// Creates a new QueueClient.
+    ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
     ///
     /// # Arguments
     ///
     /// * `endpoint` - The full URL of the Azure storage account, for example `https://myaccount.queue.core.windows.net/`
     /// * `queue_name` - The name of the queue to interact with.
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
-    ///   If None, the URL must contain authentication information (e.g., SAS token).
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
+    ///   If `None`, the URL must contain authentication information (e.g., SAS token).
     /// * `options` - Optional configuration for the client.
     pub fn new(
         endpoint: &str,
         queue_name: &str,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<QueueClientOptions>,
     ) -> Result<Self> {
         let mut url = Url::parse(endpoint)?;
@@ -47,29 +62,29 @@ impl QueueClient {
     /// # Arguments
     ///
     /// * `queue_url` - The full URL of the queue, for example `https://myaccount.queue.core.windows.net/myqueue`
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
-    ///   If None, the URL must contain authentication information (e.g., SAS token).
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
+    ///   If `None`, the URL must contain authentication information (e.g., SAS token).
     /// * `options` - Optional configuration for the client.
     #[tracing::new("Storage.Queues.Queue")]
     pub fn from_url(
         queue_url: Url,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<QueueClientOptions>,
     ) -> Result<Self> {
         let mut options = options.unwrap_or_default();
         apply_storage_logging_defaults(&mut options.client_options);
 
-        if let Some(token_credential) = credential {
-            if !queue_url.scheme().starts_with("https") {
+        if let Some(credential) = credential {
+            let credential = credential.into();
+            if matches!(credential, StorageCredential::TokenCredential(_))
+                && !queue_url.scheme().starts_with("https")
+            {
                 return Err(azure_core::Error::with_message(
                     azure_core::error::ErrorKind::Other,
                     format!("{queue_url} must use https"),
                 ));
             }
-            let auth_policy: Arc<dyn Policy> = Arc::new(BearerTokenAuthorizationPolicy::new(
-                token_credential,
-                vec!["https://storage.azure.com/.default"],
-            ));
+            let auth_policy = create_auth_policy(&credential);
             options.client_options.per_try_policies.push(auth_policy);
         }
 

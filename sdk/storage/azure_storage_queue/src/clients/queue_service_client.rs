@@ -9,45 +9,60 @@ use crate::{
     logging::apply_storage_logging_defaults,
 };
 use azure_core::{
-    credentials::TokenCredential,
-    http::{
-        policies::{auth::BearerTokenAuthorizationPolicy, Policy},
-        NoFormat, Pipeline, Response, Url,
-    },
+    http::{NoFormat, Pipeline, Response, Url},
     tracing, Result,
 };
+use azure_storage_common::{SharedKeyAuthorizationPolicy, StorageCredential};
 use std::sync::Arc;
 
+fn create_auth_policy(
+    credential: &StorageCredential,
+) -> Arc<dyn azure_core::http::policies::Policy> {
+    match credential {
+        StorageCredential::TokenCredential(token_credential) => Arc::new(
+            azure_core::http::policies::auth::BearerTokenAuthorizationPolicy::new(
+                token_credential.clone(),
+                vec!["https://storage.azure.com/.default"],
+            ),
+        ),
+        StorageCredential::SharedKey(shared_key_credential) => Arc::new(
+            SharedKeyAuthorizationPolicy::new(shared_key_credential.clone()),
+        ),
+    }
+}
+
 impl QueueServiceClient {
-    /// Creates a new QueueServiceClient, using Entra ID authentication.
+    /// Creates a new QueueServiceClient.
+    ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
     ///
     /// # Arguments
     ///
     /// * `endpoint` - The full URL of the Azure storage account, for example `https://myaccount.queue.core.windows.net/`
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token for authentication.
-    ///   If None, the URL must contain authentication information (e.g., SAS token).
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
+    ///   If `None`, the URL must contain authentication information (e.g., SAS token).
     /// * `options` - Optional configuration for the client.
     #[tracing::new("Storage.Queues.Service")]
     pub fn new(
         endpoint: &str,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<QueueServiceClientOptions>,
     ) -> Result<Self> {
         let endpoint = Url::parse(endpoint)?;
         let mut options = options.unwrap_or_default();
         apply_storage_logging_defaults(&mut options.client_options);
 
-        if let Some(token_credential) = credential {
-            if !endpoint.scheme().starts_with("https") {
+        if let Some(credential) = credential {
+            let credential = credential.into();
+            if matches!(credential, StorageCredential::TokenCredential(_))
+                && !endpoint.scheme().starts_with("https")
+            {
                 return Err(azure_core::Error::with_message(
                     azure_core::error::ErrorKind::Other,
                     format!("{endpoint} must use https"),
                 ));
             }
-            let auth_policy: Arc<dyn Policy> = Arc::new(BearerTokenAuthorizationPolicy::new(
-                token_credential,
-                vec!["https://storage.azure.com/.default"],
-            ));
+            let auth_policy = create_auth_policy(&credential);
             options.client_options.per_try_policies.push(auth_policy);
         }
 

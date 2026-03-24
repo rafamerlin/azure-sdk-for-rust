@@ -4,54 +4,52 @@
 pub use crate::generated::clients::{BlobServiceClient, BlobServiceClientOptions};
 
 use crate::{
-    logging::apply_storage_logging_defaults, pipeline::StorageHeadersPolicy, BlobClient,
-    BlobContainerClient,
+    logging::apply_storage_logging_defaults,
+    pipeline::{auth_policy_helper, StorageHeadersPolicy},
+    BlobClient, BlobContainerClient, StorageCredential,
 };
 use azure_core::{
-    credentials::TokenCredential,
-    http::{
-        policies::{auth::BearerTokenAuthorizationPolicy, Policy},
-        Pipeline, Url,
-    },
+    http::{Pipeline, Url},
     tracing, Result,
 };
-use std::sync::Arc;
 
 impl BlobServiceClient {
-    /// Creates a new BlobServiceClient, using Entra ID authentication.
+    /// Creates a new BlobServiceClient.
+    ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
     ///
     /// # Arguments
     ///
     /// * `endpoint` - The full URL of the Azure storage account, for example `https://myaccount.blob.core.windows.net/`
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
+    /// * `credential` - An optional [`StorageCredential`] for authentication. If `None`, the URL must contain authentication information (e.g., SAS token).
     /// * `options` - Optional configuration for the client.
     #[tracing::new("Storage.Blob.Service")]
     pub fn new(
         endpoint: &str,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<BlobServiceClientOptions>,
     ) -> Result<Self> {
         let endpoint = Url::parse(endpoint)?;
         let mut options = options.unwrap_or_default();
         apply_storage_logging_defaults(&mut options.client_options);
 
-        let storage_headers_policy = Arc::new(StorageHeadersPolicy);
+        let storage_headers_policy = std::sync::Arc::new(StorageHeadersPolicy);
         options
             .client_options
             .per_call_policies
             .push(storage_headers_policy);
 
-        if let Some(token_credential) = credential {
-            if !endpoint.scheme().starts_with("https") {
+        if let Some(credential) = credential {
+            let credential = credential.into();
+            if matches!(credential, StorageCredential::TokenCredential(_))
+                && !endpoint.scheme().starts_with("https")
+            {
                 return Err(azure_core::Error::with_message(
                     azure_core::error::ErrorKind::Other,
                     format!("{endpoint} must use https"),
                 ));
             }
-            let auth_policy: Arc<dyn Policy> = Arc::new(BearerTokenAuthorizationPolicy::new(
-                token_credential,
-                vec!["https://storage.azure.com/.default"],
-            ));
+            let auth_policy = auth_policy_helper::create_auth_policy(&credential);
             options.client_options.per_try_policies.push(auth_policy);
         }
 

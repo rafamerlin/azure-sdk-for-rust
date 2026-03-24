@@ -12,15 +12,13 @@ use crate::{
         BlockBlobClientUploadResult, StorageErrorCode,
     },
     partitioned_transfer::{self, PartitionedDownloadBehavior},
-    pipeline::StorageHeadersPolicy,
-    AppendBlobClient, BlockBlobClient, PageBlobClient,
+    pipeline::{auth_policy_helper, StorageHeadersPolicy},
+    AppendBlobClient, BlockBlobClient, PageBlobClient, StorageCredential,
 };
 use async_trait::async_trait;
 use azure_core::{
-    credentials::TokenCredential,
     error::ErrorKind,
     http::{
-        policies::{auth::BearerTokenAuthorizationPolicy, Policy},
         response::{AsyncResponse, PinnedStream},
         AsyncRawResponse, NoFormat, Pipeline, RequestContent, Response, StatusCode, Url, UrlExt,
     },
@@ -30,20 +28,22 @@ use std::sync::Arc;
 use std::{num::NonZero, ops::Range};
 
 impl BlobClient {
-    /// Creates a new BlobClient, using Entra ID authentication.
+    /// Creates a new BlobClient.
+    ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
     ///
     /// # Arguments
     ///
     /// * `endpoint` - The full URL of the Azure storage account, for example `https://myaccount.blob.core.windows.net/`
     /// * `container_name` - The name of the container containing this blob.
     /// * `blob_name` - The name of the blob to interact with.
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
     /// * `options` - Optional configuration for the client.
     pub fn new(
         endpoint: &str,
         container_name: &str,
         blob_name: &str,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<BlobClientOptions>,
     ) -> Result<Self> {
         let mut url = Url::parse(endpoint)?;
@@ -63,15 +63,17 @@ impl BlobClient {
 
     /// Creates a new BlobClient from a blob URL.
     ///
+    /// Supports both Entra ID token-based and Shared Key authentication.
+    ///
     /// # Arguments
     ///
     /// * `blob_url` - The full URL of the blob, for example `https://myaccount.blob.core.windows.net/mycontainer/myblob`.
-    /// * `credential` - An optional implementation of [`TokenCredential`] that can provide an Entra ID token to use when authenticating.
+    /// * `credential` - An optional [`StorageCredential`] for authentication.
     /// * `options` - Optional configuration for the client.
     #[tracing::new("Storage.Blob.Blob")]
     pub fn from_url(
         blob_url: Url,
-        credential: Option<Arc<dyn TokenCredential>>,
+        credential: Option<impl Into<StorageCredential>>,
         options: Option<BlobClientOptions>,
     ) -> Result<Self> {
         let mut options = options.unwrap_or_default();
@@ -83,17 +85,17 @@ impl BlobClient {
             .per_call_policies
             .push(storage_headers_policy);
 
-        if let Some(token_credential) = credential {
-            if !blob_url.scheme().starts_with("https") {
+        if let Some(credential) = credential {
+            let credential = credential.into();
+            if matches!(credential, StorageCredential::TokenCredential(_))
+                && !blob_url.scheme().starts_with("https")
+            {
                 return Err(azure_core::Error::with_message(
                     azure_core::error::ErrorKind::Other,
                     format!("{blob_url} must use https"),
                 ));
             }
-            let auth_policy: Arc<dyn Policy> = Arc::new(BearerTokenAuthorizationPolicy::new(
-                token_credential,
-                vec!["https://storage.azure.com/.default"],
-            ));
+            let auth_policy = auth_policy_helper::create_auth_policy(&credential);
             options.client_options.per_try_policies.push(auth_policy);
         }
 

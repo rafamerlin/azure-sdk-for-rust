@@ -542,6 +542,7 @@ dependencies = [
  "azure_core_test",
  "azure_identity",
  "azure_storage_blob_test",
+ "azure_storage_common",
  "bytes",
  "futures",
  "opentelemetry",
@@ -574,6 +575,13 @@ dependencies = [
 [[package]]
 name = "azure_storage_common"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "azure_core",
+ "time",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "azure_storage_queue"
@@ -584,6 +592,7 @@ dependencies = [
  "azure_core_opentelemetry",
  "azure_core_test",
  "azure_identity",
+ "azure_storage_common",
  "futures",
  "opentelemetry-stdout",
  "opentelemetry_sdk",
