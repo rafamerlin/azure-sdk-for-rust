@@ -115,29 +115,80 @@ impl CreateDocumentResponse {
 
             last_state_change: last_state_change_from_headers(&headers)?,
             etag: etag_from_headers(&headers)?,
-            resource_quota: resource_quota_from_headers(&headers)?,
-            resource_usage: resource_usage_from_headers(&headers)?,
-            lsn: lsn_from_headers(&headers)?,
-            schema_version: schema_version_from_headers(&headers)?,
-            alt_content_path: alt_content_path_from_headers(&headers)?,
-            content_path: content_path_from_headers(&headers)?,
-            quorum_acked_lsn: quorum_acked_lsn_from_headers(&headers)?,
-            current_write_quorum: current_write_quorum_from_headers(&headers)?,
-            current_replica_set_size: current_replica_set_size_from_headers(&headers)?,
-            role: role_from_headers(&headers)?,
-            global_committed_lsn: global_committed_lsn_from_headers(&headers)?,
-            number_of_read_regions: number_of_read_regions_from_headers(&headers)?,
-            transport_request_id: transport_request_id_from_headers(&headers)?,
-            cosmos_llsn: cosmos_llsn_from_headers(&headers)?,
-            cosmos_quorum_acked_llsn: cosmos_quorum_acked_llsn_from_headers(&headers)?,
+            resource_quota: resource_quota_from_headers_optional(&headers)?.unwrap_or_default(),
+            resource_usage: resource_usage_from_headers_optional(&headers)?.unwrap_or_default(),
+            lsn: lsn_from_headers_optional(&headers)?.unwrap_or_default(),
+            schema_version: schema_version_from_headers_optional(&headers)?.unwrap_or_default(),
+            alt_content_path: alt_content_path_from_headers_optional(&headers)?.unwrap_or_default(),
+            content_path: content_path_from_headers_optional(&headers)?.unwrap_or_default(),
+            quorum_acked_lsn: quorum_acked_lsn_from_headers_optional(&headers)?.unwrap_or_default(),
+            current_write_quorum: current_write_quorum_from_headers_optional(&headers)?.unwrap_or_default(),
+            current_replica_set_size: current_replica_set_size_from_headers_optional(&headers)?.unwrap_or_default(),
+            role: role_from_headers_optional(&headers)?.unwrap_or_default(),
+            global_committed_lsn: global_committed_lsn_from_headers_optional(&headers)?.unwrap_or_default(),
+            number_of_read_regions: number_of_read_regions_from_headers_optional(&headers)?.unwrap_or_default(),
+            transport_request_id: transport_request_id_from_headers_optional(&headers)?.unwrap_or_default(),
+            cosmos_llsn: cosmos_llsn_from_headers_optional(&headers)?.unwrap_or_default(),
+            cosmos_quorum_acked_llsn: cosmos_quorum_acked_llsn_from_headers_optional(&headers)?.unwrap_or_default(),
             session_token: session_token_from_headers(&headers)?,
             charge: request_charge_from_headers(&headers)?,
-            service_version: service_version_from_headers(&headers)?,
+            service_version: service_version_from_headers_optional(&headers)?.unwrap_or_default(),
             activity_id: activity_id_from_headers(&headers)?,
-            gateway_version: gateway_version_from_headers(&headers)?,
+            gateway_version: gateway_version_from_headers_optional(&headers)?.unwrap_or_default(),
             date: date_from_headers(&headers)?,
 
             document_attributes: DocumentAttributes::try_from(&body)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use azure_core::{headers::{self, Headers}, BytesStream, Response};
+    use bytes::Bytes;
+
+    #[tokio::test]
+    async fn create_document_response_allows_sparse_emulator_headers() -> azure_core::Result<()> {
+        let mut headers = Headers::new();
+        headers.insert(headers::DATE, "Sun, 26 Apr 2026 08:12:49 GMT");
+        headers.insert(headers::ETAG, "c13e24f2-0ea7-4111-bcc6-47a04129bf86");
+        headers.insert(headers::SESSION_TOKEN, "0:0#0");
+        headers.insert(headers::ACTIVITY_ID, "02949074-0dcd-ae46-52cc-396e269fcb15");
+        headers.insert(crate::headers::HEADER_REQUEST_CHARGE, "1");
+        headers.insert(crate::headers::HEADER_RESOURCE_QUOTA, "documentsCount=-1;");
+        headers.insert(crate::headers::HEADER_RESOURCE_USAGE, "documentsCount=0;");
+        headers.insert(crate::headers::HEADER_GATEWAY_VERSION, "2.0.0-unknown");
+        headers.insert(headers::CONTENT_TYPE, "application/json");
+
+        let response = Response::new(
+            StatusCode::Created,
+            headers,
+            Box::pin(BytesStream::new(Bytes::from_static(
+                br#"{"id":"vnext-raw-seed","text":"vnext smoke","resourceType":{"SearchResourceType":"vehicle","id":"vnext-raw-seed"},"partition":true,"_rid":"AQAAAAUAAAAAAAAZ3I2S6EAAAwY=","_self":"dbs/TML/colls/Search/docs/vnext-raw-seed/","_etag":"c13e24f2-0ea7-4111-bcc6-47a04129bf86","_attachments":"attachments/","_ts":1777191169}"#,
+            ))),
+        );
+
+        let parsed = CreateDocumentResponse::try_from(response).await?;
+
+        assert!(!parsed.is_update);
+        assert_eq!(parsed.lsn, 0);
+        assert_eq!(parsed.schema_version, "");
+        assert_eq!(parsed.alt_content_path, "");
+        assert_eq!(parsed.content_path, "");
+        assert_eq!(parsed.quorum_acked_lsn, 0);
+        assert_eq!(parsed.current_write_quorum, 0);
+        assert_eq!(parsed.current_replica_set_size, 0);
+        assert_eq!(parsed.role, 0);
+        assert_eq!(parsed.global_committed_lsn, 0);
+        assert_eq!(parsed.number_of_read_regions, 0);
+        assert_eq!(parsed.transport_request_id, 0);
+        assert_eq!(parsed.cosmos_llsn, 0);
+        assert_eq!(parsed.cosmos_quorum_acked_llsn, 0);
+        assert_eq!(parsed.service_version, "");
+        assert_eq!(parsed.gateway_version, "2.0.0-unknown");
+        assert_eq!(parsed.document_attributes.rid(), "AQAAAAUAAAAAAAAZ3I2S6EAAAwY=");
+
+        Ok(())
     }
 }

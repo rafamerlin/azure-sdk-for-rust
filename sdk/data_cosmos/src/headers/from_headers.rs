@@ -16,8 +16,18 @@ pub(crate) fn role_from_headers(headers: &Headers) -> azure_core::Result<u32> {
     headers.get_as(&HEADER_ROLE)
 }
 
+pub(crate) fn role_from_headers_optional(headers: &Headers) -> azure_core::Result<Option<u32>> {
+    headers.get_optional_as(&HEADER_ROLE)
+}
+
 pub(crate) fn number_of_read_regions_from_headers(headers: &Headers) -> azure_core::Result<u32> {
     headers.get_as(&HEADER_NUMBER_OF_READ_REGIONS)
+}
+
+pub(crate) fn number_of_read_regions_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u32>> {
+    headers.get_optional_as(&HEADER_NUMBER_OF_READ_REGIONS)
 }
 
 pub(crate) fn activity_id_from_headers(headers: &Headers) -> azure_core::Result<uuid::Uuid> {
@@ -28,8 +38,20 @@ pub(crate) fn content_path_from_headers(headers: &Headers) -> azure_core::Result
     headers.get_as(&HEADER_CONTENT_PATH)
 }
 
+pub(crate) fn content_path_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<String>> {
+    headers.get_optional_as(&HEADER_CONTENT_PATH)
+}
+
 pub(crate) fn alt_content_path_from_headers(headers: &Headers) -> azure_core::Result<String> {
     headers.get_as(&HEADER_ALT_CONTENT_PATH)
+}
+
+pub(crate) fn alt_content_path_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<String>> {
+    headers.get_optional_as(&HEADER_ALT_CONTENT_PATH)
 }
 
 pub(crate) fn resource_quota_from_headers(
@@ -39,11 +61,29 @@ pub(crate) fn resource_quota_from_headers(
     resource_quotas_from_str(s)
 }
 
+pub(crate) fn resource_quota_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<Vec<ResourceQuota>>> {
+    headers
+        .get_optional_str(&HEADER_RESOURCE_QUOTA)
+        .map(resource_quotas_from_str)
+        .transpose()
+}
+
 pub(crate) fn resource_usage_from_headers(
     headers: &Headers,
 ) -> azure_core::Result<Vec<ResourceQuota>> {
     let s = headers.get_str(&HEADER_RESOURCE_USAGE)?;
     resource_quotas_from_str(s)
+}
+
+pub(crate) fn resource_usage_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<Vec<ResourceQuota>>> {
+    headers
+        .get_optional_str(&HEADER_RESOURCE_USAGE)
+        .map(resource_quotas_from_str)
+        .transpose()
 }
 
 pub(crate) fn quorum_acked_lsn_from_headers(headers: &Headers) -> azure_core::Result<u64> {
@@ -82,6 +122,12 @@ pub(crate) fn collection_partition_index_from_headers(
     headers.get_as(&HEADER_COLLECTION_PARTITION_INDEX)
 }
 
+pub(crate) fn collection_partition_index_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_COLLECTION_PARTITION_INDEX)
+}
+
 pub(crate) fn indexing_directive_from_headers_optional(
     headers: &Headers,
 ) -> azure_core::Result<Option<IndexingDirective>> {
@@ -92,16 +138,36 @@ pub(crate) fn collection_service_index_from_headers(headers: &Headers) -> azure_
     headers.get_as(&HEADER_COLLECTION_SERVICE_INDEX)
 }
 
+pub(crate) fn collection_service_index_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_COLLECTION_SERVICE_INDEX)
+}
+
 pub(crate) fn lsn_from_headers(headers: &Headers) -> azure_core::Result<u64> {
     headers.get_as(&HEADER_LSN)
+}
+
+pub(crate) fn lsn_from_headers_optional(headers: &Headers) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_LSN)
 }
 
 pub(crate) fn item_lsn_from_headers(headers: &Headers) -> azure_core::Result<u64> {
     headers.get_as(&HEADER_ITEM_LSN)
 }
 
+pub(crate) fn item_lsn_from_headers_optional(headers: &Headers) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_ITEM_LSN)
+}
+
 pub(crate) fn transport_request_id_from_headers(headers: &Headers) -> azure_core::Result<u64> {
     headers.get_as(&HEADER_TRANSPORT_REQUEST_ID)
+}
+
+pub(crate) fn transport_request_id_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_TRANSPORT_REQUEST_ID)
 }
 
 pub(crate) fn global_committed_lsn_from_headers(headers: &Headers) -> azure_core::Result<u64> {
@@ -122,12 +188,48 @@ pub(crate) fn global_committed_lsn_from_headers(headers: &Headers) -> azure_core
     })
 }
 
+pub(crate) fn global_committed_lsn_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u64>> {
+    headers
+        .get_optional_str(&HEADER_GLOBAL_COMMITTED_LSN)
+        .map(|s| {
+            if s == "-1" {
+                Ok(0)
+            } else {
+                s.parse().map_err(|e| {
+                    Error::full(
+                        ErrorKind::DataConversion,
+                        e,
+                        format!(
+                            "failed to parse header '{:?}' as int",
+                            &HEADER_GLOBAL_COMMITTED_LSN,
+                        ),
+                    )
+                })
+            }
+        })
+        .transpose()
+}
+
 pub(crate) fn cosmos_llsn_from_headers(headers: &Headers) -> azure_core::Result<u64> {
     headers.get_as(&HEADER_COSMOS_LLSN)
 }
 
+pub(crate) fn cosmos_llsn_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_COSMOS_LLSN)
+}
+
 pub(crate) fn cosmos_item_llsn_from_headers(headers: &Headers) -> azure_core::Result<u64> {
     headers.get_as(&HEADER_COSMOS_ITEM_LLSN)
+}
+
+pub(crate) fn cosmos_item_llsn_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<u64>> {
+    headers.get_optional_as(&HEADER_COSMOS_ITEM_LLSN)
 }
 
 pub(crate) fn current_replica_set_size_from_headers(headers: &Headers) -> azure_core::Result<u64> {
@@ -144,12 +246,30 @@ pub(crate) fn schema_version_from_headers(headers: &Headers) -> azure_core::Resu
     headers.get_as(&HEADER_SCHEMA_VERSION)
 }
 
+pub(crate) fn schema_version_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<String>> {
+    headers.get_optional_as(&HEADER_SCHEMA_VERSION)
+}
+
 pub(crate) fn server_from_headers(headers: &Headers) -> azure_core::Result<String> {
     headers.get_as(&headers::SERVER)
 }
 
+pub(crate) fn server_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<String>> {
+    headers.get_optional_as(&headers::SERVER)
+}
+
 pub(crate) fn service_version_from_headers(headers: &Headers) -> azure_core::Result<String> {
     headers.get_as(&HEADER_SERVICE_VERSION)
+}
+
+pub(crate) fn service_version_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<String>> {
+    headers.get_optional_as(&HEADER_SERVICE_VERSION)
 }
 
 pub(crate) fn content_location_from_headers(
@@ -160,6 +280,12 @@ pub(crate) fn content_location_from_headers(
 
 pub(crate) fn gateway_version_from_headers(headers: &Headers) -> azure_core::Result<String> {
     headers.get_as(&HEADER_GATEWAY_VERSION)
+}
+
+pub(crate) fn gateway_version_from_headers_optional(
+    headers: &Headers,
+) -> azure_core::Result<Option<String>> {
+    headers.get_optional_as(&HEADER_GATEWAY_VERSION)
 }
 
 pub(crate) fn max_media_storage_usage_mb_from_headers(
@@ -175,11 +301,31 @@ pub(crate) fn media_storage_usage_mb_from_headers(headers: &Headers) -> azure_co
 pub(crate) fn last_state_change_from_headers(
     headers: &Headers,
 ) -> azure_core::Result<OffsetDateTime> {
-    let s = headers.get_str(&HEADER_LAST_STATE_CHANGE_UTC)?;
-    parse_last_state_change(s)
+    if let Some(s) = headers.get_optional_str(&HEADER_LAST_STATE_CHANGE_UTC) {
+        parse_last_state_change(s)
+    } else {
+        date_from_headers(headers)
+    }
 }
 
 pub(crate) fn date_from_headers(headers: &Headers) -> azure_core::Result<OffsetDateTime> {
     let s = headers.get_str(&headers::DATE)?;
     parse_rfc1123(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_state_change_falls_back_to_date_header() -> azure_core::Result<()> {
+        let mut headers = Headers::new();
+        headers.insert(headers::DATE, "Sun, 26 Apr 2026 06:28:00 GMT");
+
+        let parsed = last_state_change_from_headers(&headers);
+
+        assert!(parsed.is_ok());
+        assert_eq!(parsed?, parse_rfc1123("Sun, 26 Apr 2026 06:28:00 GMT")?);
+        Ok(())
+    }
 }

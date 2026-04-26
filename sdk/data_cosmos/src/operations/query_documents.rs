@@ -168,31 +168,82 @@ where
         Ok(QueryDocumentsResponse {
             results,
             last_state_change: last_state_change_from_headers(&headers)?,
-            resource_quota: resource_quota_from_headers(&headers)?,
-            resource_usage: resource_usage_from_headers(&headers)?,
-            lsn: lsn_from_headers(&headers)?,
+            resource_quota: resource_quota_from_headers_optional(&headers)?.unwrap_or_default(),
+            resource_usage: resource_usage_from_headers_optional(&headers)?.unwrap_or_default(),
+            lsn: lsn_from_headers_optional(&headers)?.unwrap_or_default(),
             item_count: item_count_from_headers(&headers)?,
-            schema_version: schema_version_from_headers(&headers)?,
-            alt_content_path: alt_content_path_from_headers(&headers)?,
-            content_path: content_path_from_headers(&headers)?,
+            schema_version: schema_version_from_headers_optional(&headers)?.unwrap_or_default(),
+            alt_content_path: alt_content_path_from_headers_optional(&headers)?.unwrap_or_default(),
+            content_path: content_path_from_headers_optional(&headers)?.unwrap_or_default(),
             quorum_acked_lsn: quorum_acked_lsn_from_headers_optional(&headers)?,
             current_write_quorum: current_write_quorum_from_headers_optional(&headers)?,
             current_replica_set_size: current_replica_set_size_from_headers_optional(&headers)?,
-            role: role_from_headers(&headers)?,
-            global_committed_lsn: global_committed_lsn_from_headers(&headers)?,
-            number_of_read_regions: number_of_read_regions_from_headers(&headers)?,
-            transport_request_id: transport_request_id_from_headers(&headers)?,
-            cosmos_llsn: cosmos_llsn_from_headers(&headers)?,
+            role: role_from_headers_optional(&headers)?.unwrap_or_default(),
+            global_committed_lsn: global_committed_lsn_from_headers_optional(&headers)?
+                .unwrap_or_default(),
+            number_of_read_regions: number_of_read_regions_from_headers_optional(&headers)?
+                .unwrap_or_default(),
+            transport_request_id: transport_request_id_from_headers_optional(&headers)?
+                .unwrap_or_default(),
+            cosmos_llsn: cosmos_llsn_from_headers_optional(&headers)?.unwrap_or_default(),
             cosmos_quorum_acked_llsn: cosmos_quorum_acked_llsn_from_headers_optional(&headers)?,
             session_token: session_token_from_headers(&headers)?,
             charge: request_charge_from_headers(&headers)?,
-            service_version: service_version_from_headers(&headers)?,
+            service_version: service_version_from_headers_optional(&headers)?.unwrap_or_default(),
             activity_id: activity_id_from_headers(&headers)?,
-            gateway_version: gateway_version_from_headers(&headers)?,
+            gateway_version: gateway_version_from_headers_optional(&headers)?.unwrap_or_default(),
             continuation_token: continuation_token_from_headers_optional(&headers)?,
             date: date_from_headers(&headers)?,
             query_response_meta: from_json(&body)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use azure_core::{headers::Headers, BytesStream, Response, StatusCode};
+    use bytes::Bytes;
+
+    #[tokio::test]
+    async fn query_documents_response_allows_sparse_emulator_headers() -> azure_core::Result<()> {
+        let mut headers = Headers::new();
+        headers.insert(headers::DATE, "Sun, 26 Apr 2026 06:28:00 GMT");
+        headers.insert(headers::CONTENT_TYPE, "application/json");
+        headers.insert(headers::ACTIVITY_ID, "11111111-1111-1111-1111-111111111111");
+        headers.insert(headers::SESSION_TOKEN, "0:-1#1");
+        headers.insert(headers::ITEM_COUNT, "1");
+        headers.insert(headers::CONTINUATION, "next-page");
+        headers.insert(crate::headers::HEADER_REQUEST_CHARGE, "1.0");
+
+        let response = Response::new(
+            StatusCode::Ok,
+            headers,
+            Box::pin(BytesStream::new(Bytes::from_static(
+                br#"{"_rid":"RID","_count":1,"Documents":[{"id":"doc-1"}]}"#,
+            ))),
+        );
+
+        let parsed = QueryDocumentsResponse::<serde_json::Value>::try_from(response).await?;
+
+        assert_eq!(parsed.results.len(), 1);
+        assert_eq!(parsed.item_count, 1);
+        assert_eq!(parsed.lsn, 0);
+        assert!(parsed.resource_quota.is_empty());
+        assert!(parsed.resource_usage.is_empty());
+        assert_eq!(parsed.schema_version, "");
+        assert_eq!(parsed.alt_content_path, "");
+        assert_eq!(parsed.content_path, "");
+        assert_eq!(parsed.role, 0);
+        assert_eq!(parsed.global_committed_lsn, 0);
+        assert_eq!(parsed.number_of_read_regions, 0);
+        assert_eq!(parsed.transport_request_id, 0);
+        assert_eq!(parsed.cosmos_llsn, 0);
+        assert_eq!(parsed.service_version, "");
+        assert_eq!(parsed.gateway_version, "");
+        assert_eq!(parsed.continuation_token.unwrap().value().as_str(), "next-page");
+
+        Ok(())
     }
 }
 

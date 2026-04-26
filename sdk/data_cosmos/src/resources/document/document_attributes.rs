@@ -7,10 +7,13 @@ pub struct DocumentAttributes {
     rid: String,
     #[serde(rename = "_ts")]
     ts: u64,
+    #[serde(default)]
     _self: String,
     #[serde(rename = "_etag")]
+    #[serde(default)]
     etag: String,
     #[serde(rename = "_attachments")]
+    #[serde(default)]
     attachments: String,
 }
 

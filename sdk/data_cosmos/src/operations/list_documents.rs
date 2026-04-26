@@ -145,27 +145,30 @@ where
             documents,
             content_location: content_location_from_headers(headers)?,
             last_state_change: last_state_change_from_headers(headers)?,
-            resource_quota: resource_quota_from_headers(headers)?,
-            resource_usage: resource_usage_from_headers(headers)?,
-            lsn: lsn_from_headers(headers)?,
+            resource_quota: resource_quota_from_headers_optional(headers)?.unwrap_or_default(),
+            resource_usage: resource_usage_from_headers_optional(headers)?.unwrap_or_default(),
+            lsn: lsn_from_headers_optional(headers)?.unwrap_or_default(),
             item_count: item_count_from_headers(headers)?,
-            schema_version: schema_version_from_headers(headers)?,
-            alt_content_path: alt_content_path_from_headers(headers)?,
-            content_path: content_path_from_headers(headers)?,
+            schema_version: schema_version_from_headers_optional(headers)?.unwrap_or_default(),
+            alt_content_path: alt_content_path_from_headers_optional(headers)?.unwrap_or_default(),
+            content_path: content_path_from_headers_optional(headers)?.unwrap_or_default(),
             quorum_acked_lsn: quorum_acked_lsn_from_headers_optional(headers)?,
             current_write_quorum: current_write_quorum_from_headers_optional(headers)?,
             current_replica_set_size: current_replica_set_size_from_headers_optional(headers)?,
-            role: role_from_headers(headers)?,
-            global_committed_lsn: global_committed_lsn_from_headers(headers)?,
-            number_of_read_regions: number_of_read_regions_from_headers(headers)?,
-            transport_request_id: transport_request_id_from_headers(headers)?,
-            cosmos_llsn: cosmos_llsn_from_headers(headers)?,
+            role: role_from_headers_optional(headers)?.unwrap_or_default(),
+            global_committed_lsn: global_committed_lsn_from_headers_optional(headers)?
+                .unwrap_or_default(),
+            number_of_read_regions: number_of_read_regions_from_headers_optional(headers)?
+                .unwrap_or_default(),
+            transport_request_id: transport_request_id_from_headers_optional(headers)?
+                .unwrap_or_default(),
+            cosmos_llsn: cosmos_llsn_from_headers_optional(headers)?.unwrap_or_default(),
             cosmos_quorum_acked_llsn: cosmos_quorum_acked_llsn_from_headers_optional(headers)?,
             session_token: session_token_from_headers(headers)?,
             charge: request_charge_from_headers(headers)?,
-            service_version: service_version_from_headers(headers)?,
+            service_version: service_version_from_headers_optional(headers)?.unwrap_or_default(),
             activity_id: activity_id_from_headers(headers)?,
-            gateway_version: gateway_version_from_headers(headers)?,
+            gateway_version: gateway_version_from_headers_optional(headers)?.unwrap_or_default(),
             continuation_token: continuation_token_from_headers_optional(headers)?,
             date: date_from_headers(headers)?,
         })
@@ -182,6 +185,8 @@ impl<T> Continuable for ListDocumentsResponse<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use azure_core::{headers::{self, Headers}, BytesStream, Response, StatusCode};
+    use bytes::Bytes;
 
     const BODY: &str = "
 {
@@ -222,6 +227,75 @@ mod tests {
     fn test_list_document() -> azure_core::Result<()> {
         let _document_attributes: ListDocumentsResponseAttributes = from_json(BODY)?;
         let _entries: ListDocumentsResponseEntities<MyStruct> = from_json(BODY)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn list_documents_response_allows_sparse_emulator_document_attributes() -> azure_core::Result<()> {
+        const SPARSE_BODY: &str = r##"
+{
+    "_rid": "3iNTAJKxVCk=",
+    "Documents": [
+        {
+            "color": "red",
+            "myvalue": "#f00",
+            "id": "c5d11a65-2e5a-3d9f-4de8-2447259dff38",
+            "_rid": "3iNTAJKxVCkBAAAAAAAAAA==",
+            "_etag": "\"0100eb0a-0000-0c00-0000-5ded4fe30000\"",
+            "_ts": 1575833571
+        }
+    ],
+    "_count": 1
+}"##;
+
+        let document_attributes: ListDocumentsResponseAttributes = from_json(SPARSE_BODY)?;
+        let entries: ListDocumentsResponseEntities<MyStruct> = from_json(SPARSE_BODY)?;
+
+        assert_eq!(document_attributes.documents.len(), 1);
+        assert_eq!(document_attributes.documents[0].rid(), "3iNTAJKxVCkBAAAAAAAAAA==");
+        assert_eq!(document_attributes.documents[0]._self(), "");
+        assert_eq!(entries.entities.len(), 1);
+        assert_eq!(entries.entities[0].id, "c5d11a65-2e5a-3d9f-4de8-2447259dff38");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn list_documents_response_allows_sparse_emulator_headers() -> azure_core::Result<()> {
+        let mut headers = Headers::new();
+        headers.insert(headers::DATE, "Sun, 26 Apr 2026 08:12:49 GMT");
+        headers.insert(headers::SESSION_TOKEN, "0:0#0");
+        headers.insert(headers::ACTIVITY_ID, "11111111-1111-1111-1111-111111111111");
+        headers.insert(crate::headers::HEADER_REQUEST_CHARGE, "1");
+        headers.insert(crate::headers::HEADER_RESOURCE_QUOTA, "documentsCount=-1;");
+        headers.insert(crate::headers::HEADER_RESOURCE_USAGE, "documentsCount=0;");
+        headers.insert(crate::headers::HEADER_GATEWAY_VERSION, "2.0.0-unknown");
+        headers.insert(headers::CONTENT_TYPE, "application/json");
+        headers.insert(headers::ITEM_COUNT, "1");
+
+        let response = Response::new(
+            StatusCode::Ok,
+            headers,
+            Box::pin(BytesStream::new(Bytes::from_static(
+                br#"{"_rid":"RID","Documents":[{"id":"doc-1","_rid":"doc-rid","_etag":"etag","_ts":1}],"_count":1}"#,
+            ))),
+        );
+
+        let parsed = ListDocumentsResponse::<serde_json::Value>::try_from(response).await?;
+
+        assert_eq!(parsed.documents.len(), 1);
+        assert_eq!(parsed.lsn, 0);
+        assert_eq!(parsed.schema_version, "");
+        assert_eq!(parsed.alt_content_path, "");
+        assert_eq!(parsed.content_path, "");
+        assert_eq!(parsed.role, 0);
+        assert_eq!(parsed.global_committed_lsn, 0);
+        assert_eq!(parsed.number_of_read_regions, 0);
+        assert_eq!(parsed.transport_request_id, 0);
+        assert_eq!(parsed.cosmos_llsn, 0);
+        assert_eq!(parsed.service_version, "");
+        assert_eq!(parsed.gateway_version, "2.0.0-unknown");
 
         Ok(())
     }
