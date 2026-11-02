@@ -5,6 +5,7 @@
 ### Features Added
 
 - Added a `default` feature forwarding Core defaults so consumers can opt out with `default-features = false`.
+- Added `SharedKeyPolicy` under the `shared_key` module (enabled by default): a per-call `Policy` that implements the legacy SharedKey authorization scheme for Blob and Queue clients, including path-style Azurite endpoints.
 
 ### Breaking Changes
 

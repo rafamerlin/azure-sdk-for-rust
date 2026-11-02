@@ -1091,6 +1091,11 @@ pub struct BlobContainerClientGetPropertiesOptions<'a> {
 /// Options to be passed to `BlobContainerClient::list_blobs()`
 #[derive(Clone, Default, SafeDebug)]
 pub struct BlobContainerClientListBlobsOptions<'a> {
+    /// A character used to group blobs in a virtual directory listing. Typically `/`.
+    /// When set, the response rolls up blob names sharing the delimiter into
+    /// [`BlobPrefix`](crate::models::BlobPrefix) entries, producing a single-level list.
+    pub delimiter: Option<String>,
+
     /// Specify to include additional, optional information.
     pub include: Option<Vec<ListBlobsIncludeItem>>,
 
@@ -1119,6 +1124,7 @@ impl BlobContainerClientListBlobsOptions<'_> {
     /// Transforms this [`BlobContainerClientListBlobsOptions`] into a new `BlobContainerClientListBlobsOptions` that owns the underlying data, cloning it if necessary.
     pub fn into_owned(self) -> BlobContainerClientListBlobsOptions<'static> {
         BlobContainerClientListBlobsOptions {
+            delimiter: self.delimiter,
             include: self.include,
             marker: self.marker,
             maxresults: self.maxresults,

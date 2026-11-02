@@ -8,6 +8,7 @@
 
 ### Bugs Fixed
 
+- `QueryBuilder` now percent-encodes spaces in query values as `%20` instead of `+`, which some Azure services (e.g., Blob Storage tag search `where` expressions) reject. Values that legitimately contain `+` continue to be encoded as `%2B`.
 - Avoided unnecessary error construction and backtrace capture in `Headers::get_optional_str()` when a header is absent ([#5446](https://github.com/Azure/azure-sdk-for-rust/pull/5446)).
 - Update TLS dependencies to distrust compromised emSign CAs
 

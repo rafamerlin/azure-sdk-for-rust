@@ -296,15 +296,27 @@ impl<'a> QueryBuilder<'a> {
         // Rebuild the query string with all values from the BTreeMap
         self.url.query_pairs_mut().clear();
 
-        let mut serializer = self.url.query_pairs_mut();
-        for (key, values) in &self.values {
-            for value in values {
-                if value.is_empty() {
-                    serializer.append_key_only(key);
-                } else {
-                    serializer.append_pair(key, value);
+        {
+            let mut serializer = self.url.query_pairs_mut();
+            for (key, values) in &self.values {
+                for value in values {
+                    if value.is_empty() {
+                        serializer.append_key_only(key);
+                    } else {
+                        serializer.append_pair(key, value);
+                    }
                 }
             }
+        }
+
+        // The `application/x-www-form-urlencoded` serializer encodes spaces
+        // as `+`, but Azure services (e.g., Blob Storage tag search `where`
+        // expressions) reject `+` in query values. Rewrite every literal `+`
+        // to `%20`: values that actually contain `+` are percent-encoded as
+        // `%2B` above, so a remaining `+` is always an encoded space.
+        let query = self.url.query().map(|query| query.replace('+', "%20"));
+        if let Some(query) = query {
+            self.url.set_query(Some(&query));
         }
     }
 }
@@ -422,6 +434,32 @@ mod test {
     }
 
     #[test]
+    fn test_query_builder_encodes_spaces_as_percent_20() {
+        // Azure services reject `+` in some query values (e.g., Blob Storage
+        // tag search `where` expressions), so spaces must be `%20`.
+        let mut url = Url::parse("https://contoso.com").unwrap();
+        let mut builder = url.query_builder();
+        builder.set_pair("where", "\"a\"='1' AND \"b\"='2'");
+        builder.build();
+        assert_eq!(
+            url.as_str(),
+            "https://contoso.com/?where=%22a%22%3D%271%27%20AND%20%22b%22%3D%272%27"
+        );
+    }
+
+    #[test]
+    fn test_query_builder_encodes_plus_in_values() {
+        // A literal `+` in a value is percent-encoded, so the `+` -> `%20`
+        // rewrite in `build()` never corrupts it.
+        let mut url = Url::parse("https://contoso.com").unwrap();
+        let mut builder = url.query_builder();
+        builder.set_pair("sig", "a+b");
+        builder.set_pair("where", "a b");
+        builder.build();
+        assert_eq!(url.as_str(), "https://contoso.com/?sig=a%2Bb&where=a%20b");
+    }
+
+    #[test]
     fn test_query_builder_new_parameter() {
         let mut url = Url::parse("https://contoso.com?b=2").unwrap();
         let mut builder = url.query_builder();
@@ -480,7 +518,9 @@ mod test {
         let mut builder = url.query_builder();
         builder.set_pair("a", "hello world");
         builder.build();
-        assert_eq!(url.as_str(), "https://contoso.com/?a=hello+world");
+        // Spaces are percent-encoded rather than `+`-encoded, which some
+        // Azure services (e.g., Blob Storage tag search) require.
+        assert_eq!(url.as_str(), "https://contoso.com/?a=hello%20world");
     }
 
     #[test]

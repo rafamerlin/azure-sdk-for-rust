@@ -7,6 +7,28 @@ use azure_core::http::{new_http_client, ClientOptions, HttpClientOptions, Transp
 
 use crate::logging::apply_storage_logging_defaults;
 
+/// SharedKey authorization policy, from `azure_storage_common`.
+///
+/// ```no_run
+/// use azure_core::http::Url;
+/// use std::sync::Arc;
+/// use azure_storage_blob::shared_key::SharedKeyPolicy;
+/// use azure_storage_blob::{BlobServiceClient, BlobServiceClientOptions};
+///
+/// # fn run() -> azure_core::Result<()> {
+/// let mut options = BlobServiceClientOptions::default();
+/// options.client_options.per_call_policies =
+///     vec![Arc::new(SharedKeyPolicy::new("myaccount", "key"))];
+/// let client = BlobServiceClient::new(
+///     Url::parse("https://myaccount.blob.core.windows.net")?,
+///     None,
+///     Some(options),
+/// );
+/// # Ok(())
+/// # }
+/// ```
+pub use azure_storage_common::shared_key;
+
 mod append_blob_client;
 mod blob_client;
 mod blob_container_client;

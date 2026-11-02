@@ -4,6 +4,10 @@
 
 ### Features Added
 
+- Added a `delimiter` option to `BlobContainerClient::list_blobs()` and parsed
+  `<BlobPrefix>` roll-up entries into `ListBlobsResponse::blob_prefixes`, restoring
+  single-level (virtual-directory) listings.
+
 ### Breaking Changes
 
 ### Bugs Fixed

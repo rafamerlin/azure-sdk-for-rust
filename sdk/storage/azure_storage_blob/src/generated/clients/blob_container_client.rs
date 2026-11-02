@@ -724,6 +724,9 @@ impl BlobContainerClient {
         query_builder
             .append_pair("comp", "list")
             .append_pair("restype", "container");
+        if let Some(delimiter) = options.delimiter.as_ref() {
+            query_builder.set_pair("delimiter", delimiter);
+        }
         if let Some(include) = options.include.as_ref() {
             query_builder.set_pair(
                 "include",

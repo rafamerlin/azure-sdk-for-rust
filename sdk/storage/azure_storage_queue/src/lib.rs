@@ -13,3 +13,6 @@ pub mod clients;
 pub mod models;
 
 pub use clients::{QueueClient, QueueClientOptions, QueueServiceClient, QueueServiceClientOptions};
+
+/// SharedKey authorization policy, from `azure_storage_common`.
+pub use azure_storage_common::shared_key;

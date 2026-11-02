@@ -35,6 +35,67 @@ impl Blob_itemsBlobItem {
     }
 }
 
+/// Captures both `<Blob>` and `<BlobPrefix>` children of a `<Blobs>` element in
+/// one pass, because a single `<Blobs>` element can interleave them. Implemented
+/// manually: the generated-style adjacent-dedup deserializer cannot express the
+/// interleaved form.
+#[derive(Default, Serialize)]
+#[serde(rename = "Blobs")]
+pub(crate) struct Blob_itemsInventory {
+    #[serde(default)]
+    Blob: Vec<BlobItem>,
+    #[serde(default, rename = "BlobPrefix")]
+    BlobPrefix: Vec<crate::models::BlobPrefix>,
+}
+
+impl Blob_itemsInventory {
+    /// Consumes the captured items as `(blobs, blob prefixes)`.
+    pub fn into_parts(self) -> (Vec<BlobItem>, Vec<crate::models::BlobPrefix>) {
+        (self.Blob, self.BlobPrefix)
+    }
+}
+
+impl<'de> Deserialize<'de> for Blob_itemsInventory {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{IgnoredAny, MapAccess, Visitor};
+        use std::fmt;
+
+        struct InventoryVisitor;
+
+        impl<'de> Visitor<'de> for InventoryVisitor {
+            type Value = Blob_itemsInventory;
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "an XML `<Blobs>` element")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut inv = Blob_itemsInventory::default();
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "Blob" => inv.Blob.push(map.next_value::<BlobItem>()?),
+                        "BlobPrefix" => inv
+                            .BlobPrefix
+                            .push(map.next_value::<crate::models::BlobPrefix>()?),
+                        _ => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                    }
+                }
+                Ok(inv)
+            }
+        }
+
+        deserializer.deserialize_map(InventoryVisitor)
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename = "Blobs")]
 pub(crate) struct Blob_itemsFilterBlobItem {

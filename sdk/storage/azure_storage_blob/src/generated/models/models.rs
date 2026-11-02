@@ -6,8 +6,8 @@
 use super::{
     models_serde,
     xml_helpers::{
-        Blob_itemsBlobItem, Blob_itemsFilterBlobItem, Blob_tag_setBlobTag, Committed_blocksBlock,
-        Container_itemsContainerItem, CorsCorsRule, Uncommitted_blocksBlock,
+        Blob_itemsBlobItem, Blob_itemsFilterBlobItem, Blob_itemsInventory, Blob_tag_setBlobTag,
+        Committed_blocksBlock, Container_itemsContainerItem, CorsCorsRule, Uncommitted_blocksBlock,
     },
     AccessTier, ArchiveStatus, BlobType, CopyStatus, GeoReplicationStatusType,
     ImmutabilityPolicyMode, LeaseDuration, LeaseState, LeaseStatus, PublicAccessType,
@@ -127,6 +127,16 @@ pub struct BlobContainerClientReleaseLeaseResult;
 /// Contains results for `BlobContainerClient::renew_lease()`
 #[derive(SafeDebug)]
 pub struct BlobContainerClientRenewLeaseResult;
+
+/// A synthetic virtual-directory entry produced by a delimited List Blobs operation.
+#[derive(Clone, Default, Deserialize, SafeDebug, Serialize)]
+#[non_exhaustive]
+#[serde(rename = "BlobPrefix")]
+pub struct BlobPrefix {
+    /// The prefix (virtual directory name) rolled up under the delimiter.
+    #[serde(rename = "Name", skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
 
 /// Represents a blob.
 #[derive(Clone, Default, Deserialize, SafeDebug, Serialize)]
@@ -898,7 +908,7 @@ pub struct KeyInfo {
 }
 
 /// The result of the List Blobs API.
-#[derive(Clone, Default, Deserialize, SafeDebug, Serialize)]
+#[derive(Clone, Default, SafeDebug, Serialize)]
 #[non_exhaustive]
 #[serde(rename = "EnumerationResults")]
 pub struct ListBlobsResponse {
@@ -910,6 +920,11 @@ pub struct ListBlobsResponse {
         serialize_with = "Blob_itemsBlobItem::wrap"
     )]
     pub blob_items: Vec<BlobItem>,
+
+    /// The rolled-up virtual directory prefixes returned when the request carries a
+    /// [delimiter](crate::models::BlobContainerClientListBlobsOptions).
+    #[serde(default, rename = "Blobs", skip_serializing_if = "Vec::is_empty")]
+    pub blob_prefixes: Vec<BlobPrefix>,
 
     /// The container name.
     #[serde(rename = "@ContainerName", skip_serializing_if = "Option::is_none")]
@@ -935,6 +950,45 @@ pub struct ListBlobsResponse {
     /// The service endpoint.
     #[serde(rename = "@ServiceEndpoint", skip_serializing_if = "Option::is_none")]
     pub service_endpoint: Option<String>,
+}
+
+impl<'de> serde::de::Deserialize<'de> for ListBlobsResponse {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(rename = "EnumerationResults")]
+        struct ListBlobsResponseShadow {
+            #[serde(default, rename = "Blobs")]
+            blobs: Blob_itemsInventory,
+            #[serde(default, rename = "@ContainerName")]
+            container_name: Option<String>,
+            #[serde(default, rename = "Marker")]
+            marker: Option<String>,
+            #[serde(default, rename = "MaxResults")]
+            max_results: Option<i32>,
+            #[serde(default, rename = "NextMarker")]
+            next_marker: Option<String>,
+            #[serde(default, rename = "Prefix")]
+            prefix: Option<String>,
+            #[serde(default, rename = "@ServiceEndpoint")]
+            service_endpoint: Option<String>,
+        }
+
+        let shadow = ListBlobsResponseShadow::deserialize(deserializer)?;
+        let (blob_items, blob_prefixes) = shadow.blobs.into_parts();
+        Ok(ListBlobsResponse {
+            blob_items,
+            blob_prefixes,
+            container_name: shadow.container_name,
+            marker: shadow.marker,
+            max_results: shadow.max_results,
+            next_marker: shadow.next_marker,
+            prefix: shadow.prefix,
+            service_endpoint: shadow.service_endpoint,
+        })
+    }
 }
 
 /// The result of the List Containers API.
