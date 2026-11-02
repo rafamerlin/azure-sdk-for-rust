@@ -15,7 +15,8 @@ categories = ["api-bindings"]
 exclude.workspace = true
 
 [features]
-default = ["azure_core/default"]
+default = ["azure_core/default", "shared_key"]
+shared_key = ["azure_core/hmac_rust"]
 
 [dependencies]
 async-trait = "0.1"
