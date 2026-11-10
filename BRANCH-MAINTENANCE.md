@@ -41,12 +41,37 @@ Deliberately NOT carried (all decided 2026-10-24):
 
 - The `azurite_find_blobs_by_tags.rs` verification example and its
   `hmac_rust` dev-dependency (the consuming project has its own harness for
-  which this file is not the record).
+  which this file is not the record). Its intent is now covered by
+  `tests/emulator.rs`: an opt-in target that signs, uploads, lists with a
+  delimiter, and sends a spaced tag filter. It asserts no tag-search paging,
+  because the emulator's pagination differs from the service.
 - The previous-generation fork fixes `16347585` / `07410b6`
   (find-by-tags `next_marker` exposure and `marker` / `maxresults` builder
   options) — the new generation ships `FindBlobsByTagsOptions` with both.
 - The Cosmos emulator-relax parsing fix `77ba6239` — no consumer imports
   `azure_data_cosmos` yet; port it only when that changes.
+
+## Fork contract harness (decided 2026-11-10)
+
+The four carried behaviours map to four checks:
+
+| Behaviour | Check | Runs |
+|---|---|---|
+| SharedKey signing | `tests/emulator.rs` | opt-in, `AZURE_STORAGE_EMULATOR=1` |
+| `%20` in tag filters | `QueryBuilder` unit tests in `typespec_client_core` | always |
+| `delimiter` + `BlobPrefix` | `tests/fork_contract.rs` against a captured page | always |
+| SharedKey by default | `tests/fork_contract.rs` compile-time use | always |
+
+- `tests/fixtures/list_blobs_delimited.{xml,json}` is the captured page and
+  the fields the consumer reads. `tests/fixtures/README.md` records how to
+  capture them. The XML is the service's body; the JSON is the expectation.
+- `scripts/fork-verify.sh` is the gate. It fails when the capture is missing
+  and runs the emulator checks only when asked.
+- Do not replace the captured XML with a hand-written string. The
+  hand-written strings in `list_blobs_parsing.rs` test parser shapes; they
+  are not evidence of what the service sends.
+- Do not add app-specific fields to `GoldenPage`. It holds only what the
+  consumer reads.
 
 ## Reapply procedure after pulling Microsoft main
 
@@ -65,15 +90,19 @@ Deliberately NOT carried (all decided 2026-10-24):
 4. Do NOT reapply anything in `generated/` when Microsoft regenerates the
    same area — check their commits for the same change first. If their
    regeneration drops the option again, reapply on top and note it here.
-5. SDK validation battery (all commands from the worktree):
+5. Fork verification (from the worktree):
 
    ```bash
-   cargo test -q -p typespec_client_core --lib
-   cargo test -q -p azure_core --lib
-   cargo test -q -p azure_storage_common
-   cargo test -q -p azure_storage_blob --doc
-   cargo fmt -p typespec_client_core -p azure_core -p azure_storage_common -p azure_storage_blob -p azure_storage_queue -- --check
-   cargo clippy -p typespec_client_core -p azure_core -p azure_storage_common -p azure_storage_blob -p azure_storage_queue --all-targets
+   ./scripts/fork-verify.sh
+   ```
+
+   The script runs the fork contract tests, fmt, and clippy. It fails when
+   the captured fixture is missing, so a rebase cannot quietly delete the
+   `delimiter` / `BlobPrefix` contract. It skips the emulator unless
+   `AZURE_STORAGE_EMULATOR=1` and `AZURE_STORAGE_ACCESS_KEY` are set:
+
+   ```bash
+   AZURE_STORAGE_EMULATOR=1 AZURE_STORAGE_ACCESS_KEY=... ./scripts/fork-verify.sh
    ```
 
 6. Then re-verify the consuming project against this branch: its unit suite
